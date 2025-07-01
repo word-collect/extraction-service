@@ -10,10 +10,10 @@ import * as bedrock from 'aws-cdk-lib/aws-bedrock'
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks'
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions'
 import * as targets from 'aws-cdk-lib/aws-events-targets'
-import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
-import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
+// import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
+// import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { SYSTEM_PROMPT, USER_PROMPT } from '../src/prompts'
-import * as logs from 'aws-cdk-lib/aws-logs'
+// import * as logs from 'aws-cdk-lib/aws-logs'
 
 export interface ExtractionServiceStackProps extends cdk.StackProps {
   appName: string
@@ -45,17 +45,6 @@ export class ExtractionServiceStack extends cdk.Stack {
     )
 
     const bucket = s3.Bucket.fromBucketArn(this, 'UploadBucket', bucketARN)
-
-    // debuglogs
-    const debugGroup = new logs.LogGroup(this, 'AnalysisReadyDebug', {
-      retention: logs.RetentionDays.ONE_DAY
-    })
-
-    new events.Rule(this, 'DebugAnalysisReady', {
-      eventBus,
-      eventPattern: { source: ['ai-service'], detailType: ['AnalysisReady'] },
-      targets: [new targets.CloudWatchLogGroup(debugGroup)]
-    })
 
     /* -------------------------------------------------------- */
     /* 2.  DynamoDB to store results                            */
@@ -141,7 +130,7 @@ export class ExtractionServiceStack extends cdk.Stack {
         {
           eventBus,
           detailType: 'AnalysisReady',
-          source: 'ai-service',
+          source: 'extraction-service',
           // pass S3 key and Bedrock JSON as the event body
           detail: sfn.TaskInput.fromObject({
             s3Key: sfn.JsonPath.stringAt('$.s3Key'),
@@ -178,33 +167,33 @@ export class ExtractionServiceStack extends cdk.Stack {
       targets: [new targets.SfnStateMachine(stateMachine)]
     })
 
-    /* -------------------------------------------------------- */
-    /* 6.  Lambda + HTTP API for polling results                */
-    /* -------------------------------------------------------- */
-    const getResultFn = new lambda.NodejsFunction(this, 'GetResultFn', {
-      entry: 'src/get-result.ts',
-      environment: { TABLE_NAME: table.tableName }
-    })
+    // /* -------------------------------------------------------- */
+    // /* 6.  Lambda + HTTP API for polling results                */
+    // /* -------------------------------------------------------- */
+    // const getResultFn = new lambda.NodejsFunction(this, 'GetResultFn', {
+    //   entry: 'src/get-result.ts',
+    //   environment: { TABLE_NAME: table.tableName }
+    // })
 
-    table.grantReadData(getResultFn)
+    // table.grantReadData(getResultFn)
 
-    const httpApi = new apigwv2.HttpApi(this, 'AiApi', {
-      apiName: 'ai-service',
-      description: 'Serves analysis results JSON'
-    })
+    // const httpApi = new apigwv2.HttpApi(this, 'AiApi', {
+    //   apiName: 'ai-service',
+    //   description: 'Serves analysis results JSON'
+    // })
 
-    httpApi.addRoutes({
-      path: '/analysis/{key+}',
-      methods: [events.HttpMethod.GET],
-      integration: new integrations.HttpLambdaIntegration(
-        'GetResultIntegration',
-        getResultFn
-      )
-    })
+    // httpApi.addRoutes({
+    //   path: '/analysis/{key+}',
+    //   methods: [events.HttpMethod.GET],
+    //   integration: new integrations.HttpLambdaIntegration(
+    //     'GetResultIntegration',
+    //     getResultFn
+    //   )
+    // })
 
-    new ssm.StringParameter(this, 'AiApiEndpoint', {
-      parameterName: `/${appName}/${environment}/extraction-service/apiEndpoint`,
-      stringValue: httpApi.apiEndpoint
-    })
+    // new ssm.StringParameter(this, 'AiApiEndpoint', {
+    //   parameterName: `/${appName}/${environment}/extraction-service/apiEndpoint`,
+    //   stringValue: httpApi.apiEndpoint
+    // })
   }
 }
