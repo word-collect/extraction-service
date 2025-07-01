@@ -1,0 +1,192 @@
+import * as cdk from 'aws-cdk-lib'
+import { Construct } from 'constructs'
+import * as events from 'aws-cdk-lib/aws-events'
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
+import * as lambda from 'aws-cdk-lib/aws-lambda-nodejs'
+import { Duration } from 'aws-cdk-lib'
+import * as s3 from 'aws-cdk-lib/aws-s3'
+import * as ssm from 'aws-cdk-lib/aws-ssm'
+import * as bedrock from 'aws-cdk-lib/aws-bedrock'
+import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks'
+import * as sfn from 'aws-cdk-lib/aws-stepfunctions'
+import * as targets from 'aws-cdk-lib/aws-events-targets'
+import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
+import { prompt } from '../src/prompt'
+import * as logs from 'aws-cdk-lib/aws-logs'
+
+export interface ExtractionServiceStackProps extends cdk.StackProps {
+  appName: string
+  environment: string
+}
+
+export class ExtractionServiceStack extends cdk.Stack {
+  constructor(
+    scope: Construct,
+    id: string,
+    props: ExtractionServiceStackProps
+  ) {
+    super(scope, id, props)
+    const { appName, environment } = props
+
+    /* -------------------------------------------------------- */
+    /* 1.  Import shared resources (bus ARN, bucket name)       */
+    /* -------------------------------------------------------- */
+
+    const eventBus = events.EventBus.fromEventBusName(
+      this,
+      'SharedEventBus',
+      cdk.Fn.importValue(`${appName}-${environment}-event-bus-name`)
+    )
+
+    const bucketARN = ssm.StringParameter.valueForStringParameter(
+      this,
+      `/${appName}/${environment}/upload-service/bucket-arn`
+    )
+
+    const bucket = s3.Bucket.fromBucketArn(this, 'UploadBucket', bucketARN)
+
+    // debuglogs
+    const debugGroup = new logs.LogGroup(this, 'AnalysisReadyDebug', {
+      retention: logs.RetentionDays.ONE_DAY
+    })
+
+    new events.Rule(this, 'DebugAnalysisReady', {
+      eventBus,
+      eventPattern: { source: ['ai-service'], detailType: ['AnalysisReady'] },
+      targets: [new targets.CloudWatchLogGroup(debugGroup)]
+    })
+
+    /* -------------------------------------------------------- */
+    /* 2.  DynamoDB to store results                            */
+    /* -------------------------------------------------------- */
+
+    const table = new dynamodb.Table(this, 'Analysis', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST
+    })
+
+    /* -------------------------------------------------------- */
+    /* 3.  Lambda: fetch the uploaded file                      */
+    /* -------------------------------------------------------- */
+
+    const fetchObjectFn = new lambda.NodejsFunction(this, 'FetchObjectFn', {
+      entry: 'src/fetch-object.ts',
+      memorySize: 1024,
+      timeout: Duration.minutes(1)
+    })
+
+    bucket.grantRead(fetchObjectFn)
+
+    /* -------------------------------------------------------- */
+    /* 4.  Bedrock model & Step Functions state machine         */
+    /* -------------------------------------------------------- */
+
+    const model = bedrock.FoundationModel.fromFoundationModelId(
+      this,
+      'ClaudeSonnet',
+      bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_5_HAIKU_20241022_V1_0
+    )
+
+    const fetchTask = new tasks.LambdaInvoke(this, 'FetchFile', {
+      lambdaFunction: fetchObjectFn,
+      payloadResponseOnly: true
+    })
+
+    const bedrockTask = new tasks.BedrockInvokeModel(this, 'AnalyseText', {
+      model,
+      body: sfn.TaskInput.fromObject({
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          },
+          { role: 'user', content: sfn.JsonPath.stringAt('$.text') }
+        ]
+      }),
+      resultPath: '$.analysis'
+    })
+
+    const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
+      table,
+      item: {
+        pk: tasks.DynamoAttributeValue.fromString(
+          sfn.JsonPath.stringAt('$.s3Key')
+        ),
+        result: tasks.DynamoAttributeValue.fromString(
+          sfn.JsonPath.stringAt('$.analysis.body')
+        )
+      }
+    })
+
+    const notifyTask = new tasks.EventBridgePutEvents(this, 'EmitReadyEvent', {
+      entries: [
+        {
+          eventBus,
+          detailType: 'AnalysisReady',
+          source: 'ai-service',
+          // pass S3 key and Bedrock JSON as the event body
+          detail: sfn.TaskInput.fromObject({
+            s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+            result: sfn.JsonPath.stringAt('$.analysis.body')
+          })
+        }
+      ]
+    })
+
+    const definition = fetchTask
+      .next(bedrockTask)
+      .next(saveTask)
+      .next(notifyTask)
+
+    const stateMachine = new sfn.StateMachine(this, 'FileAnalysisSM', {
+      definition,
+      timeout: Duration.minutes(3)
+    })
+
+    /* -------------------------------------------------------- */
+    /* 5.  EventBridge rule – start state machine               */
+    /* -------------------------------------------------------- */
+    new events.Rule(this, 'StartAnalysisRule', {
+      eventBus,
+      eventPattern: {
+        source: ['aws.s3'],
+        detailType: ['Object Created'],
+        detail: {
+          bucket: { name: [bucket.bucketName] },
+          object: { key: [{ prefix: 'raw/' }] }
+        }
+      },
+      targets: [new targets.SfnStateMachine(stateMachine)]
+    })
+
+    /* -------------------------------------------------------- */
+    /* 6.  Lambda + HTTP API for polling results                */
+    /* -------------------------------------------------------- */
+    const getResultFn = new lambda.NodejsFunction(this, 'GetResultFn', {
+      entry: 'src/get-result.ts',
+      environment: { TABLE_NAME: table.tableName }
+    })
+
+    table.grantReadData(getResultFn)
+
+    const httpApi = new apigwv2.HttpApi(this, 'AiApi', {
+      apiName: 'ai-service',
+      description: 'Serves analysis results JSON'
+    })
+
+    httpApi.addRoutes({
+      path: '/analysis/{key+}',
+      methods: [events.HttpMethod.GET],
+      integration: new integrations.HttpLambdaIntegration(
+        'GetResultIntegration',
+        getResultFn
+      )
+    })
+
+    new ssm.StringParameter(this, 'AiApiEndpoint', {
+      parameterName: `/${appName}/${environment}/extraction-service/apiEndpoint`,
+      stringValue: httpApi.apiEndpoint
+    })
+  }
+}
