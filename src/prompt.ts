@@ -13,4 +13,6 @@ The JSON should be in the following format:
     "word3"
   ]
 }
+
+Please extract the words from the following:
 `
