@@ -97,7 +97,7 @@ export class ExtractionServiceStack extends cdk.Stack {
       model,
       body: sfn.TaskInput.fromObject({
         anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 1000,
+        max_tokens: 4096,
         system: 'You are a language analyst. Respond only with valid JSON.',
         messages: [
           {

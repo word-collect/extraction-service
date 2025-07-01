@@ -19,7 +19,9 @@ Your job:
 
 {
   "words": [
-    { "term": "<string>", "partOfSpeech": "<string>", "definition": "<string>" },
+    word1,
+    word2,
+    word3,
     …
   ]
 }

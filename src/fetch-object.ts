@@ -1,10 +1,11 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
 
+const s3 = new S3Client({})
+
 export const handler = async (event: {
   detail: { bucket: { name: string }; object: { key: string } }
 }) => {
-  const s3 = new S3Client({})
   const { bucket, object } = event.detail
 
   const resp = await s3.send(
