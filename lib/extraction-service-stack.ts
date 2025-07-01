@@ -85,7 +85,8 @@ export class ExtractionServiceStack extends cdk.Stack {
     const model = bedrock.FoundationModel.fromFoundationModelId(
       this,
       'ClaudeSonnet',
-      bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_5_HAIKU_20241022_V1_0
+      bedrock.FoundationModelIdentifier
+        .ANTHROPIC_CLAUDE_3_7_SONNET_20250219_V1_0
     )
 
     const fetchTask = new tasks.LambdaInvoke(this, 'FetchFile', {
