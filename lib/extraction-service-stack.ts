@@ -82,7 +82,7 @@ export class ExtractionServiceStack extends cdk.Stack {
       payloadResponseOnly: true
     })
 
-    const bedrockTask = new tasks.BedrockInvokeModel(this, 'AnalyseText', {
+    const bedrockTask = new tasks.BedrockInvokeModel(this, 'AnalyzeText', {
       model,
       body: sfn.TaskInput.fromObject({
         anthropic_version: 'bedrock-2023-05-31',
