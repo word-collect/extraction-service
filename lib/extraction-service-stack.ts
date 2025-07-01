@@ -112,6 +112,8 @@ export class ExtractionServiceStack extends cdk.Stack {
       resultPath: '$.analysis'
     })
 
+    const result = '$.analysis.Body.content[0].text'
+
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
       table,
       item: {
@@ -119,7 +121,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           sfn.JsonPath.stringAt('$.s3Key')
         ),
         result: tasks.DynamoAttributeValue.fromString(
-          sfn.JsonPath.stringAt('$.analysis.Body')
+          sfn.JsonPath.stringAt(result)
         )
       }
     })
@@ -133,7 +135,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           // pass S3 key and Bedrock JSON as the event body
           detail: sfn.TaskInput.fromObject({
             s3Key: sfn.JsonPath.stringAt('$.s3Key'),
-            result: sfn.JsonPath.stringAt('$.analysis.body')
+            result: sfn.JsonPath.stringAt(result)
           })
         }
       ]
