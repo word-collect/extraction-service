@@ -1,11 +1,14 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
 
-// event = { s3Key: 'raw/xxxx', bucket: '…' } – sent by the rule
-export const handler = async (event: { s3Key: string; bucket: string }) => {
+export const handler = async (event: {
+  detail: { bucket: { name: string }; object: { key: string } }
+}) => {
   const s3 = new S3Client({})
+  const { bucket, object } = event.detail
+
   const resp = await s3.send(
-    new GetObjectCommand({ Bucket: event.bucket, Key: event.s3Key })
+    new GetObjectCommand({ Bucket: bucket.name, Key: object.key })
   )
 
   // stream → buffer → UTF-8 string
@@ -15,7 +18,7 @@ export const handler = async (event: { s3Key: string; bucket: string }) => {
 
   return {
     // 👈  shape the SFN state will receive
-    s3Key: event.s3Key,
+    s3Key: object.key,
     text
   }
 }
