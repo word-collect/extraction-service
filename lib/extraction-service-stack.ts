@@ -119,7 +119,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           sfn.JsonPath.stringAt('$.s3Key')
         ),
         result: tasks.DynamoAttributeValue.fromString(
-          sfn.JsonPath.stringAt('$.analysis.body')
+          sfn.JsonPath.stringAt('$.analysis.Body')
         )
       }
     })
