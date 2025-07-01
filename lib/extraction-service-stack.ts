@@ -12,7 +12,7 @@ import * as sfn from 'aws-cdk-lib/aws-stepfunctions'
 import * as targets from 'aws-cdk-lib/aws-events-targets'
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
-import { prompt } from '../src/prompt'
+import { SYSTEM_PROMPT, USER_PROMPT } from '../src/prompts'
 import * as logs from 'aws-cdk-lib/aws-logs'
 
 export interface ExtractionServiceStackProps extends cdk.StackProps {
@@ -98,13 +98,13 @@ export class ExtractionServiceStack extends cdk.Stack {
       body: sfn.TaskInput.fromObject({
         anthropic_version: 'bedrock-2023-05-31',
         max_tokens: 4096,
-        system: 'You are a language analyst. Respond only with valid JSON.',
+        system: SYSTEM_PROMPT,
         messages: [
           {
             role: 'user',
             content: sfn.JsonPath.format(
               '{}\n\n{}',
-              prompt,
+              USER_PROMPT,
               sfn.JsonPath.stringAt('$.text')
             )
           }
