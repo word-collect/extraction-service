@@ -116,6 +116,11 @@ export class ExtractionServiceStack extends cdk.Stack {
       resultPath: '$.analysis'
     })
 
+    const dropText = new sfn.Pass(this, 'DropText', {
+      result: sfn.Result.fromString(''),
+      resultPath: '$.text'
+    })
+
     const result = '$.analysis.Body.content[0].text'
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
@@ -148,12 +153,13 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     const definition = fetchTask
       .next(bedrockTask)
+      .next(dropText)
       .next(saveTask)
       .next(notifyTask)
 
     const stateMachine = new sfn.StateMachine(this, 'FileAnalysisSM', {
       definition,
-      timeout: Duration.minutes(3)
+      timeout: Duration.minutes(10)
     })
 
     /* -------------------------------------------------------- */
