@@ -11,18 +11,9 @@ Your job:
    Discard full sentences and passages.
 4. Remove trailing punctuation and lowercase duplicates (“Bray” vs “bray”).  
    If a candidate occurs many times, keep it once.
-5. For each kept term return:  
-   • **term**   – the word or phrase, all lowercase  
-   • **partOfSpeech** – noun, verb, adjective, adverb, other  
-   • **definition**    – one concise English definition (≤ 15 words)
-6. Output **valid JSON ONLY** in this exact schema:
+5. Return the words as a JSON array of strings.
+6. Respond with MINIFIED JSON (one line, no spaces or newlines).
+7. Here is an example of the JSON you should return:
 
-{
-  "words": [
-    word1,
-    word2,
-    word3,
-    …
-  ]
-}
+{"words":[word1,word2,word3,…]}
 `
