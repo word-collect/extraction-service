@@ -123,7 +123,8 @@ export class ExtractionServiceStack extends cdk.Stack {
         result: tasks.DynamoAttributeValue.fromString(
           sfn.JsonPath.stringAt(result)
         )
-      }
+      },
+      resultPath: '$.dynamoPutResult'
     })
 
     const notifyTask = new tasks.EventBridgePutEvents(this, 'EmitReadyEvent', {
