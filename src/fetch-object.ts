@@ -1,15 +1,21 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
-import { TextDecoder } from 'util'
+import { Readable } from 'node:stream'
 
-const s3 = new S3Client({})
-export const handler = async (event: any) => {
-  const { bucket, object } = event.detail
-  const res = await s3.send(
-    new GetObjectCommand({
-      Bucket: bucket.name,
-      Key: object.key
-    })
+// event = { s3Key: 'raw/xxxx', bucket: '…' } – sent by the rule
+export const handler = async (event: { s3Key: string; bucket: string }) => {
+  const s3 = new S3Client({})
+  const resp = await s3.send(
+    new GetObjectCommand({ Bucket: event.bucket, Key: event.s3Key })
   )
-  const text = await res.Body!.transformToString()
-  return { text, s3Key: object.key }
+
+  // stream → buffer → UTF-8 string
+  const chunks: Buffer[] = []
+  for await (const chunk of resp.Body as Readable) chunks.push(chunk as Buffer)
+  const text = Buffer.concat(chunks).toString('utf-8')
+
+  return {
+    // 👈  shape the SFN state will receive
+    s3Key: event.s3Key,
+    text
+  }
 }
