@@ -96,13 +96,23 @@ export class ExtractionServiceStack extends cdk.Stack {
     const bedrockTask = new tasks.BedrockInvokeModel(this, 'AnalyseText', {
       model,
       body: sfn.TaskInput.fromObject({
+        anthropic_version: 'bedrock-2023-05-31',
+        max_tokens: 1000,
         messages: [
+          {
+            role: 'system',
+            content:
+              'You are a language analyst. Respond **only** with valid JSON.'
+          },
           {
             role: 'user',
             content: prompt
           },
           { role: 'user', content: sfn.JsonPath.stringAt('$.text') }
-        ]
+        ],
+        // optional tweakables
+        temperature: 0.2,
+        top_p: 0.9
       }),
       resultPath: '$.analysis'
     })
