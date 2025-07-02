@@ -82,9 +82,9 @@ export class ExtractionServiceStack extends cdk.Stack {
       payloadResponseOnly: true
     })
 
-    const modelArn =
-      `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/` +
-      bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0
+    const region = cdk.Stack.of(this).region
+    const modelId = 'anthropic.claude-3-sonnet-20240229-v1:0' // short ID
+    const modelArn = `arn:aws:bedrock:${region}::foundation-model/${modelId}`
 
     const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
       service: 'BedrockRuntime',
