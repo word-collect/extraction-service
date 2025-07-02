@@ -1,4 +1,5 @@
-import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { Readable } from 'node:stream'
 
 const s3 = new S3Client({})
 
@@ -7,23 +8,18 @@ export const handler = async (event: {
 }) => {
   const { bucket, object } = event.detail
 
-  // we only need metadata now
-  const head = await s3.send(
-    new HeadObjectCommand({ Bucket: bucket.name, Key: object.key })
+  const resp = await s3.send(
+    new GetObjectCommand({ Bucket: bucket.name, Key: object.key })
   )
 
-  const ct = head.ContentType ?? ''
-  const format = ct.includes('html')
-    ? 'html'
-    : ct.includes('markdown')
-    ? 'md'
-    : ct.includes('pdf')
-    ? 'pdf'
-    : 'txt'
+  // stream → buffer → UTF-8 string
+  const chunks: Buffer[] = []
+  for await (const chunk of resp.Body as Readable) chunks.push(chunk as Buffer)
+  const text = Buffer.concat(chunks).toString('utf-8')
 
   return {
-    s3Uri: `s3://${bucket.name}/${object.key}`, // NEW
-    name: object.key.split('/').pop()!,
-    format // html | md | pdf | txt
+    // 👈  shape the SFN state will receive
+    s3Key: object.key,
+    text
   }
 }
