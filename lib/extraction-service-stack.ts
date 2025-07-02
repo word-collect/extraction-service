@@ -98,9 +98,7 @@ export class ExtractionServiceStack extends cdk.Stack {
             )
           }
         ],
-        // optional tweakables
-        temperature: 0.5,
-        top_p: 0.9
+        temperature: 0
       }),
       resultPath: '$.analysis'
     })
