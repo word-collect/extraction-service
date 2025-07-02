@@ -95,7 +95,7 @@ export class ExtractionServiceStack extends cdk.Stack {
 
       parameters: {
         /* ---- top-level Converse fields (PascalCase) ---- */
-        ModelId: modelArn,
+        ModelId: modelId,
 
         System: [
           // ARRAY of SystemContentBlock
@@ -114,7 +114,12 @@ export class ExtractionServiceStack extends cdk.Stack {
                   // ← Pascal-Case union key
                   Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
                   Name: sfn.JsonPath.stringAt('$.name'),
-                  Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
+                  Source: {
+                    S3Location: {
+                      // NEW
+                      Uri: sfn.JsonPath.stringAt('$.s3Uri')
+                    }
+                  }
                 }
               }
             ]
