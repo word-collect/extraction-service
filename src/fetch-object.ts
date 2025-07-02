@@ -26,16 +26,20 @@ export const handler = async (event: {
   /* --- Buffer all the way down ------------------------------------- */
   const fileBuf = await streamToBuffer(resp.Body as Readable)
 
-  /* --- derive “format” exactly as Bedrock wants -------------------- */
-  const ct = (resp.ContentType ?? '').toLowerCase()
-
-  const format = ct.includes('html')
-    ? 'HTML'
+  /* --- derive format -------------------------------------------------- */
+  // Prefer the S3 object's Content-Type, if present
+  const ct = resp.ContentType ?? ''
+  const fmtFromCT = ct.includes('html')
+    ? 'html'
     : ct.includes('markdown')
-    ? 'MARKDOWN'
+    ? 'md'
     : ct.includes('pdf')
-    ? 'PDF'
-    : 'TEXT' /* fall-back */
+    ? 'pdf'
+    : ct.includes('text')
+    ? 'txt'
+    : ''
+
+  const format = fmtFromCT || 'txt'
 
   /* --- log a hash so you can compare with the console dump --------- */
   console.log(
