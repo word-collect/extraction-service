@@ -1,7 +1,18 @@
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'node:stream'
+import crypto from 'node:crypto'
 
 const s3 = new S3Client({})
+
+/* ------------------------------------------------------------------ */
+/* tiny helper: keep everything as raw bytes                          */
+const streamToBuffer = async (stream: Readable): Promise<Buffer> => {
+  const chunks: Uint8Array[] = []
+  for await (const chunk of stream)
+    chunks.push(chunk instanceof Buffer ? chunk : Buffer.from(chunk))
+  return Buffer.concat(chunks)
+}
+/* ------------------------------------------------------------------ */
 
 export const handler = async (event: {
   detail: { bucket: { name: string }; object: { key: string } }
@@ -12,40 +23,30 @@ export const handler = async (event: {
     new GetObjectCommand({ Bucket: bucket.name, Key: object.key })
   )
 
-  // stream → Buffer
-  const chunks: Buffer[] = []
-  for await (const chunk of resp.Body as Readable) chunks.push(chunk as Buffer)
-  let fileBuf = Buffer.concat(chunks)
+  /* --- Buffer all the way down ------------------------------------- */
+  const fileBuf = await streamToBuffer(resp.Body as Readable)
 
-  /* --- derive format -------------------------------------------------- */
-  // Prefer the S3 object's Content-Type, if present
-  const ct = resp.ContentType ?? ''
-  const fmtFromCT = ct.includes('html')
-    ? 'html'
+  /* --- derive “format” exactly as Bedrock wants -------------------- */
+  const ct = (resp.ContentType ?? '').toLowerCase()
+
+  const format = ct.includes('html')
+    ? 'HTML'
     : ct.includes('markdown')
-    ? 'md'
+    ? 'MARKDOWN'
     : ct.includes('pdf')
-    ? 'pdf'
-    : ct.includes('text')
-    ? 'txt'
-    : ''
+    ? 'PDF'
+    : 'TEXT' /* fall-back */
 
-  const format = fmtFromCT || 'txt'
-
-  const isText = ['html', 'md', 'txt', 'csv', 'json'].includes(format)
-
-  if (isText) {
-    // strip UTF-8 BOM + leading whitespace
-    fileBuf = Buffer.from(
-      fileBuf.toString('utf8').replace(/^\uFEFF?\s+/, ''),
-      'utf8'
-    )
-  }
+  /* --- log a hash so you can compare with the console dump --------- */
+  console.log(
+    'sha256',
+    crypto.createHash('sha256').update(fileBuf).digest('hex') /* ★ changed */
+  )
 
   return {
     s3Key: object.key,
     name: object.key.split('/').pop()!,
-    format, // html | md | txt | pdf
-    bytes: fileBuf.toString('base64')
+    format, // HTML | MARKDOWN | TEXT | PDF  (all caps)
+    bytes: fileBuf.toString('base64') // still base-64, but from untouched Buffer
   }
 }
