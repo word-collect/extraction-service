@@ -13,6 +13,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets'
 // import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 // import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { SYSTEM_PROMPT, USER_PROMPT } from '../src/prompts'
+import * as iam from 'aws-cdk-lib/aws-iam'
 // import * as logs from 'aws-cdk-lib/aws-logs'
 
 export interface ExtractionServiceStackProps extends cdk.StackProps {
@@ -82,34 +83,64 @@ export class ExtractionServiceStack extends cdk.Stack {
       payloadResponseOnly: true
     })
 
-    const bedrockTask = new tasks.BedrockInvokeModel(this, 'AnalyzeText', {
-      model,
-      body: sfn.TaskInput.fromObject({
-        anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [
+    const region = cdk.Stack.of(this).region
+    const modelId = 'anthropic.claude-3-sonnet-20240229-v1:0' // short ID
+    const modelArn = `arn:aws:bedrock:${region}::foundation-model/${modelId}`
+
+    const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
+      service: 'BedrockRuntime',
+      action: 'converse',
+
+      iamResources: [modelArn], // least-privilege
+
+      parameters: {
+        /* ---- top-level Converse fields (PascalCase) ---- */
+        ModelId: modelArn,
+
+        System: [
+          // ARRAY of SystemContentBlock
+          { Text: SYSTEM_PROMPT } // ← Pascal-Case union key
+        ],
+
+        Messages: [
           {
-            role: 'user',
-            content: [
-              { type: 'text', text: USER_PROMPT },
-              { type: 'text', text: sfn.JsonPath.stringAt('$.text') }
+            Role: 'user',
+            Content: [
+              { Text: USER_PROMPT }, // numbered instructions
+
+              {
+                // the Kindle file
+                Document: {
+                  // ← Pascal-Case union key
+                  Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
+                  Name: sfn.JsonPath.stringAt('$.name'),
+                  Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
+                }
+              }
             ]
           }
         ],
-        temperature: 0,
-        top_p: 1,
-        top_k: 250
-      }),
+
+        InferenceConfig: {
+          MaxTokens: 4096,
+          Temperature: 0,
+          TopP: 1
+        },
+
+        AdditionalModelRequestFields: {
+          top_k: 1 // greedy decode; key stays snake-case
+        }
+      },
+
       resultPath: '$.analysis'
     })
 
     const dropText = new sfn.Pass(this, 'DropText', {
       result: sfn.Result.fromString(''),
-      resultPath: '$.text'
+      resultPath: '$.bytes'
     })
 
-    const result = '$.analysis.Body.content[0].text'
+    const result = '$.analysis.Messages[0].Content[0].Text'
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
       table,
@@ -140,7 +171,7 @@ export class ExtractionServiceStack extends cdk.Stack {
     })
 
     const definition = fetchTask
-      .next(bedrockTask)
+      .next(converseTask)
       .next(dropText)
       .next(saveTask)
       .next(notifyTask)
@@ -149,6 +180,13 @@ export class ExtractionServiceStack extends cdk.Stack {
       definition,
       timeout: Duration.minutes(10)
     })
+
+    stateMachine.role.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'], // Converse uses the same action
+        resources: [modelArn] // least-privilege
+      })
+    )
 
     /* -------------------------------------------------------- */
     /* 5.  EventBridge rule – start state machine               */

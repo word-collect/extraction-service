@@ -29,6 +29,4 @@ export const USER_PROMPT = `
    ⛔ If any term would appear twice, remove the duplicates *before you respond*.
 6. Don’t insert spaces after the comma separators, but don’t remove spaces between the words of a phrase.
 7. Return the list as a single string, without any commentary.
-
-
 `

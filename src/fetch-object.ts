@@ -12,14 +12,30 @@ export const handler = async (event: {
     new GetObjectCommand({ Bucket: bucket.name, Key: object.key })
   )
 
-  // stream → buffer → UTF-8 string
+  // stream → Buffer
   const chunks: Buffer[] = []
   for await (const chunk of resp.Body as Readable) chunks.push(chunk as Buffer)
-  const text = Buffer.concat(chunks).toString('utf-8')
+  const fileBuf = Buffer.concat(chunks)
+
+  /* --- derive format -------------------------------------------------- */
+  // Prefer the S3 object's Content-Type, if present
+  const ct = resp.ContentType ?? ''
+  const fmtFromCT = ct.includes('html')
+    ? 'html'
+    : ct.includes('markdown')
+    ? 'md'
+    : ct.includes('pdf')
+    ? 'pdf'
+    : ct.includes('text')
+    ? 'txt'
+    : ''
+
+  const format = fmtFromCT || 'txt'
 
   return {
-    // 👈  shape the SFN state will receive
     s3Key: object.key,
-    text
+    name: object.key.split('/').pop()!,
+    format, // html | md | txt | pdf
+    bytes: fileBuf.toString('base64')
   }
 }
