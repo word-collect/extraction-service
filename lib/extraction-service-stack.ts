@@ -106,8 +106,6 @@ export class ExtractionServiceStack extends cdk.Stack {
           {
             Role: 'user',
             Content: [
-              { Text: USER_PROMPT }, // numbered instructions
-
               {
                 // the Kindle file
                 Document: {
@@ -116,7 +114,8 @@ export class ExtractionServiceStack extends cdk.Stack {
                   Name: sfn.JsonPath.stringAt('$.name'),
                   Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
                 }
-              }
+              },
+              { Text: USER_PROMPT } // numbered instructions
             ]
           }
         ],

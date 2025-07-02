@@ -12,7 +12,7 @@ export const SYSTEM_PROMPT = `
 `
 
 export const USER_PROMPT = `
-1. Following this numbered list you will find the source text.
+1. Examine the provided file.
 2. A *candidate* for extraction is either  
    • a single word **≥ 4 letters**, or  
    • a short phrase that acts like an idiom (“out of hand”, “fits and starts”)  
