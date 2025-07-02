@@ -91,11 +91,10 @@ export class ExtractionServiceStack extends cdk.Stack {
         messages: [
           {
             role: 'user',
-            content: sfn.JsonPath.format(
-              '{}\n\n{}',
-              USER_PROMPT,
-              sfn.JsonPath.stringAt('$.text')
-            )
+            content: [
+              { type: 'text', text: USER_PROMPT },
+              { type: 'text', text: sfn.JsonPath.stringAt('$.text') }
+            ]
           }
         ],
         temperature: 0,
