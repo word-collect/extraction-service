@@ -15,7 +15,7 @@ export const handler = async (event: {
   // stream → Buffer
   const chunks: Buffer[] = []
   for await (const chunk of resp.Body as Readable) chunks.push(chunk as Buffer)
-  const fileBuf = Buffer.concat(chunks)
+  let fileBuf = Buffer.concat(chunks)
 
   /* --- derive format -------------------------------------------------- */
   // Prefer the S3 object's Content-Type, if present
@@ -31,6 +31,16 @@ export const handler = async (event: {
     : ''
 
   const format = fmtFromCT || 'txt'
+
+  const isText = ['html', 'md', 'txt', 'csv', 'json'].includes(format)
+
+  if (isText) {
+    // strip UTF-8 BOM + leading whitespace
+    fileBuf = Buffer.from(
+      fileBuf.toString('utf8').replace(/^\uFEFF?\s+/, ''),
+      'utf8'
+    )
+  }
 
   return {
     s3Key: object.key,
