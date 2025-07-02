@@ -18,7 +18,8 @@ export const USER_PROMPT = `
    • a short phrase that acts like an idiom (“out of hand”, “fits and starts”)
      or simply a set of words that commonly appear together.
    Discard full sentences and passages.
-4. Remove trailing punctuation and lowercase duplicates (“Bray” vs “bray”).  
-   If a candidate occurs many times, keep it once.
-5. Return the terms as a single comma-separated list without any commentary.
+4. Remove trailing punctuation, trailing spaces, and lowercase duplicates (“Bray” vs “bray”).  
+5. Remove duplicates from the list.
+6. Return the terms as a single comma-separated list without any commentary.
+7. Don't put spaces after the comma separators, but don't remove spaces between the words of a phrase.
 `
