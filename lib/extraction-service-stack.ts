@@ -13,6 +13,7 @@ import * as targets from 'aws-cdk-lib/aws-events-targets'
 // import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
 // import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
 import { SYSTEM_PROMPT, USER_PROMPT } from '../src/prompts'
+import * as iam from 'aws-cdk-lib/aws-iam'
 // import * as logs from 'aws-cdk-lib/aws-logs'
 
 export interface ExtractionServiceStackProps extends cdk.StackProps {
@@ -179,6 +180,13 @@ export class ExtractionServiceStack extends cdk.Stack {
       definition,
       timeout: Duration.minutes(10)
     })
+
+    stateMachine.role.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'], // Converse uses the same action
+        resources: [modelArn] // least-privilege
+      })
+    )
 
     /* -------------------------------------------------------- */
     /* 5.  EventBridge rule – start state machine               */
