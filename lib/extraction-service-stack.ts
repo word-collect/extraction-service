@@ -106,6 +106,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           {
             Role: 'user',
             Content: [
+              { Text: USER_PROMPT },
               {
                 // the Kindle file
                 Document: {
@@ -114,8 +115,7 @@ export class ExtractionServiceStack extends cdk.Stack {
                   Name: sfn.JsonPath.stringAt('$.name'),
                   Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
                 }
-              },
-              { Text: USER_PROMPT } // numbered instructions
+              }
             ]
           }
         ],
@@ -139,7 +139,7 @@ export class ExtractionServiceStack extends cdk.Stack {
       resultPath: '$.bytes'
     })
 
-    const result = '$.analysis.Messages[0].Content[0].Text'
+    const result = '$.analysis.Output.Message.Content[0].Text'
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
       table,

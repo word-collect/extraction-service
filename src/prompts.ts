@@ -12,7 +12,7 @@ export const SYSTEM_PROMPT = `
 `
 
 export const USER_PROMPT = `
-1. Examine the provided file.
+1. Following this numbered list you will find the source text.
 2. A *candidate* for extraction is either  
    • a single word **≥ 4 letters**, or  
    • a short phrase that acts like an idiom (“out of hand”, “fits and starts”)  
@@ -29,4 +29,6 @@ export const USER_PROMPT = `
    ⛔ If any term would appear twice, remove the duplicates *before you respond*.
 6. Don’t insert spaces after the comma separators, but don’t remove spaces between the words of a phrase.
 7. Return the list as a single string, without any commentary.
+
+
 `
