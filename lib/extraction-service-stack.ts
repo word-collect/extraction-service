@@ -89,23 +89,31 @@ export class ExtractionServiceStack extends cdk.Stack {
     const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
       service: 'BedrockRuntime',
       action: 'converse',
-      iamResources: [modelArn],
+
+      iamResources: [modelArn], // least-privilege
 
       parameters: {
-        /* top-level fields */
+        /* ---- top-level Converse fields (PascalCase) ---- */
         ModelId: modelArn,
-        System: [{ text: SYSTEM_PROMPT }],
+
+        System: [
+          // ARRAY of SystemContentBlock
+          { Text: SYSTEM_PROMPT } // ← Pascal-Case union key
+        ],
 
         Messages: [
           {
             Role: 'user',
             Content: [
-              { text: USER_PROMPT },
+              { Text: USER_PROMPT }, // numbered instructions
+
               {
-                document: {
-                  format: sfn.JsonPath.stringAt('$.format'),
-                  name: sfn.JsonPath.stringAt('$.name'),
-                  source: { bytes: sfn.JsonPath.stringAt('$.bytes') }
+                // the Kindle file
+                Document: {
+                  // ← Pascal-Case union key
+                  Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
+                  Name: sfn.JsonPath.stringAt('$.name'),
+                  Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
                 }
               }
             ]
@@ -113,14 +121,13 @@ export class ExtractionServiceStack extends cdk.Stack {
         ],
 
         InferenceConfig: {
-          MaxTokens: 4096, // note Pascal-Case here too
+          MaxTokens: 4096,
           Temperature: 0,
           TopP: 1
         },
 
-        /* Pascal-Case key, snake-case value inside */
         AdditionalModelRequestFields: {
-          top_k: 1 // greedy decode
+          top_k: 1 // greedy decode; key stays snake-case
         }
       },
 
