@@ -89,37 +89,34 @@ export class ExtractionServiceStack extends cdk.Stack {
     const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
       service: 'BedrockRuntime',
       action: 'converse',
+      iamResources: [modelArn],
       parameters: {
-        modelId:
-          bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0.toString(),
-
-        // payload that Bedrock expects
-        body: {
-          anthropic_version: 'bedrock-2023-05-31',
-          system: SYSTEM_PROMPT,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: USER_PROMPT },
-                {
-                  type: 'document',
-                  document: {
-                    format: sfn.JsonPath.stringAt('$.format'), // html|txt|md|pdf…
-                    name: sfn.JsonPath.stringAt('$.name'),
-                    source: { bytes: sfn.JsonPath.stringAt('$.bytes') }
-                  }
+        ModelId: modelArn,
+        System: SYSTEM_PROMPT,
+        Messages: [
+          {
+            Role: 'user',
+            Content: [
+              { Type: 'text', Text: USER_PROMPT },
+              {
+                Type: 'document',
+                Document: {
+                  Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
+                  Name: sfn.JsonPath.stringAt('$.name'),
+                  Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
                 }
-              ]
-            }
-          ],
-          max_tokens: 4096,
-          temperature: 0,
-          top_p: 1,
-          top_k: 1
+              }
+            ]
+          }
+        ],
+        InferenceConfig: {
+          Temperature: 0,
+          TopP: 1,
+          TopK: 1,
+          MaxTokens: 4096
         }
       },
-      iamResources: [modelArn],
+
       resultPath: '$.analysis'
     })
 
