@@ -82,25 +82,44 @@ export class ExtractionServiceStack extends cdk.Stack {
       payloadResponseOnly: true
     })
 
-    const bedrockTask = new tasks.BedrockInvokeModel(this, 'AnalyzeText', {
-      model,
-      body: sfn.TaskInput.fromObject({
-        anthropic_version: 'bedrock-2023-05-31',
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: USER_PROMPT },
-              { type: 'text', text: sfn.JsonPath.stringAt('$.text') }
-            ]
-          }
-        ],
-        temperature: 0,
-        top_p: 1,
-        top_k: 250
-      }),
+    const modelArn =
+      `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/` +
+      bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0
+
+    const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
+      service: 'BedrockRuntime',
+      action: 'converse',
+      parameters: {
+        modelId:
+          bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0.toString(),
+
+        // payload that Bedrock expects
+        body: {
+          anthropic_version: 'bedrock-2023-05-31',
+          system: SYSTEM_PROMPT,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: USER_PROMPT },
+                {
+                  type: 'document',
+                  document: {
+                    format: sfn.JsonPath.stringAt('$.format'), // html|txt|md|pdf…
+                    name: sfn.JsonPath.stringAt('$.name'),
+                    source: { bytes: sfn.JsonPath.stringAt('$.bytes') }
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 4096,
+          temperature: 0,
+          top_p: 1,
+          top_k: 1
+        }
+      },
+      iamResources: [modelArn],
       resultPath: '$.analysis'
     })
 
@@ -140,7 +159,7 @@ export class ExtractionServiceStack extends cdk.Stack {
     })
 
     const definition = fetchTask
-      .next(bedrockTask)
+      .next(converseTask)
       .next(dropText)
       .next(saveTask)
       .next(notifyTask)
