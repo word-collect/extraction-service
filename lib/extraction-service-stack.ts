@@ -137,10 +137,10 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     const dropText = new sfn.Pass(this, 'DropText', {
       result: sfn.Result.fromString(''),
-      resultPath: '$.text'
+      resultPath: '$.bytes'
     })
 
-    const result = '$.analysis.Body.content[0].text'
+    const result = '$.analysis.Messages[0].Content[0].Text'
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
       table,
