@@ -51,6 +51,6 @@ export const handler = async (event: {
     s3Key: object.key,
     name: object.key.split('/').pop()!,
     format, // HTML | MARKDOWN | TEXT | PDF  (all caps)
-    bytes: fileBuf.toString('base64') // still base-64, but from untouched Buffer
+    bytes: fileBuf
   }
 }
