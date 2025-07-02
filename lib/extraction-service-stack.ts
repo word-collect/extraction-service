@@ -89,31 +89,45 @@ export class ExtractionServiceStack extends cdk.Stack {
     const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
       service: 'BedrockRuntime',
       action: 'converse',
-      iamResources: [modelArn],
+      iamResources: [modelArn], // least-privilege
+
       parameters: {
+        /* ---- top-level fields MUST be PascalCase ---- */
         ModelId: modelArn,
-        System: SYSTEM_PROMPT,
+
+        // System prompt is an ARRAY of SystemContentBlock
+        System: [
+          { text: SYSTEM_PROMPT } // union key `text`
+        ],
+
         Messages: [
           {
             Role: 'user',
             Content: [
-              { Type: 'text', Text: USER_PROMPT },
+              { text: USER_PROMPT }, // numbered instructions
               {
-                Type: 'document',
-                Document: {
-                  Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
-                  Name: sfn.JsonPath.stringAt('$.name'),
-                  Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
+                // the Kindle file
+                document: {
+                  // union key `document`
+                  format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
+                  name: sfn.JsonPath.stringAt('$.name'),
+                  source: { bytes: sfn.JsonPath.stringAt('$.bytes') }
                 }
               }
             ]
           }
         ],
+
+        // base inference params
         InferenceConfig: {
-          Temperature: 0,
-          TopP: 1,
-          TopK: 1,
-          MaxTokens: 4096
+          maxTokens: 4096,
+          temperature: 0,
+          topP: 1
+        },
+
+        // Anthropic-specific extras
+        additionalModelRequestFields: {
+          top_k: 1 // greedy decode
         }
       },
 
