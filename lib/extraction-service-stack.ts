@@ -140,7 +140,7 @@ export class ExtractionServiceStack extends cdk.Stack {
     // })
 
     const analyzeFileFn = new lambda.NodejsFunction(this, 'AnalyzeFileFn', {
-      entry: 'src/analyze-file.ts',
+      entry: 'src/analyze-text.ts',
       memorySize: 2048,
       timeout: Duration.minutes(15),
       environment: { MODEL_ID: modelId },
