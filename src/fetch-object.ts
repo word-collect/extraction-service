@@ -32,9 +32,9 @@ export const handler = async (event: {
 
   let format = fmtFromCT || 'txt'
 
-  if (format === 'html') {
-    format = 'txt'
-  }
+  // if (format === 'html') {
+  //   format = 'txt'
+  // }
 
   return {
     s3Key: object.key,
