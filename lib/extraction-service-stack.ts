@@ -140,10 +140,20 @@ export class ExtractionServiceStack extends cdk.Stack {
     // })
 
     const analyzeFileFn = new lambda.NodejsFunction(this, 'AnalyzeFileFn', {
-      entry: 'src/analyze-text.ts',
-      memorySize: 1024,
-      timeout: Duration.minutes(15)
+      entry: 'src/analyze-file.ts',
+      memorySize: 2048,
+      timeout: Duration.minutes(15),
+      environment: { MODEL_ID: modelId },
+      bundling: { nodeModules: ['@aws-sdk/client-bedrock-runtime'] } // v3 SDK
     })
+
+    // least-privilege permission
+    analyzeFileFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [modelArn]
+      })
+    )
 
     const analyzeTask = new tasks.LambdaInvoke(this, 'AnalyzeFile', {
       lambdaFunction: analyzeFileFn,
@@ -197,12 +207,12 @@ export class ExtractionServiceStack extends cdk.Stack {
       timeout: Duration.minutes(10)
     })
 
-    stateMachine.role.addToPrincipalPolicy(
-      new iam.PolicyStatement({
-        actions: ['bedrock:InvokeModel'], // Converse uses the same action
-        resources: [modelArn] // least-privilege
-      })
-    )
+    // stateMachine.role.addToPrincipalPolicy(
+    //   new iam.PolicyStatement({
+    //     actions: ['bedrock:InvokeModel'], // Converse uses the same action
+    //     resources: [modelArn] // least-privilege
+    //   })
+    // )
 
     /* -------------------------------------------------------- */
     /* 5.  EventBridge rule – start state machine               */
