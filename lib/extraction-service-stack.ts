@@ -87,56 +87,68 @@ export class ExtractionServiceStack extends cdk.Stack {
     const modelId = 'anthropic.claude-3-sonnet-20240229-v1:0' // short ID
     const modelArn = `arn:aws:bedrock:${region}::foundation-model/${modelId}`
 
-    const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
-      service: 'BedrockRuntime',
-      action: 'converse',
+    // const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
+    //   service: 'BedrockRuntime',
+    //   action: 'converse',
 
-      iamResources: [modelArn], // least-privilege
+    //   iamResources: [modelArn], // least-privilege
 
-      parameters: {
-        /* ---- top-level Converse fields (PascalCase) ---- */
-        ModelId: modelArn,
+    //   parameters: {
+    //     /* ---- top-level Converse fields (PascalCase) ---- */
+    //     ModelId: modelArn,
 
-        System: [
-          // ARRAY of SystemContentBlock
-          { Text: SYSTEM_PROMPT } // ← Pascal-Case union key
-        ],
+    //     System: [
+    //       // ARRAY of SystemContentBlock
+    //       { Text: SYSTEM_PROMPT } // ← Pascal-Case union key
+    //     ],
 
-        Messages: [
-          {
-            Role: 'user',
-            Content: [
-              {
-                // the Kindle file
-                Document: {
-                  // ← Pascal-Case union key
-                  Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
-                  Name: sfn.JsonPath.stringAt('$.name'),
-                  Source: {
-                    Bytes: Buffer.from(
-                      sfn.JsonPath.stringAt('$.bytes'),
-                      'base64'
-                    )
-                  }
-                }
-              },
-              { Text: USER_PROMPT }
-            ]
-          }
-        ],
+    //     Messages: [
+    //       {
+    //         Role: 'user',
+    //         Content: [
+    //           {
+    //             // the Kindle file
+    //             Document: {
+    //               // ← Pascal-Case union key
+    //               Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
+    //               Name: sfn.JsonPath.stringAt('$.name'),
+    //               Source: {
+    //                 Bytes: Buffer.from(
+    //                   sfn.JsonPath.stringAt('$.bytes'),
+    //                   'base64'
+    //                 )
+    //               }
+    //             }
+    //           },
+    //           { Text: USER_PROMPT }
+    //         ]
+    //       }
+    //     ],
 
-        InferenceConfig: {
-          MaxTokens: 4096,
-          Temperature: 0,
-          TopP: 1
-        },
+    //     InferenceConfig: {
+    //       MaxTokens: 4096,
+    //       Temperature: 0,
+    //       TopP: 1
+    //     },
 
-        AdditionalModelRequestFields: {
-          top_k: 1 // greedy decode; key stays snake-case
-        }
-      },
+    //     AdditionalModelRequestFields: {
+    //       top_k: 1 // greedy decode; key stays snake-case
+    //     }
+    //   },
 
-      resultPath: '$.analysis'
+    //   resultPath: '$.analysis'
+    // })
+
+    const analyzeFileFn = new lambda.NodejsFunction(this, 'AnalyzeFileFn', {
+      entry: 'src/analyze-text.ts',
+      memorySize: 1024,
+      timeout: Duration.minutes(15)
+    })
+
+    const analyzeTask = new tasks.LambdaInvoke(this, 'AnalyzeFile', {
+      lambdaFunction: analyzeFileFn,
+      payloadResponseOnly: true,
+      resultPath: '$.analysis' // analysis now lives at $.analysis
     })
 
     const dropText = new sfn.Pass(this, 'DropText', {
@@ -144,7 +156,7 @@ export class ExtractionServiceStack extends cdk.Stack {
       resultPath: '$.bytes'
     })
 
-    const result = '$.analysis.Output.Message.Content[0].Text'
+    const result = '$.analysis'
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
       table,
@@ -175,7 +187,7 @@ export class ExtractionServiceStack extends cdk.Stack {
     })
 
     const definition = fetchTask
-      .next(converseTask)
+      .next(analyzeTask)
       .next(dropText)
       .next(saveTask)
       .next(notifyTask)
