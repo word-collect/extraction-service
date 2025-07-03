@@ -108,17 +108,12 @@ export class ExtractionServiceStack extends cdk.Stack {
     const analyzeTask = new tasks.LambdaInvoke(this, 'AnalyzeFile', {
       lambdaFunction: analyzeFileFn,
       payloadResponseOnly: true,
-      /* --------------------------------------------------------------
-       * resultSelector builds a LITTLE object that will be merged into
-       * the current state before ResultPath runs.
-       *   • Put the analysis string at $.analysis
-       *   • Set bytes to null (overwriting the big base-64 blob)
-       * -------------------------------------------------------------- */
-      resultSelector: {
-        'analysis.$': '$', // “$” here means “the Lambda’s raw return value”
-        bytes: null // wipe out the old bytes field
-      },
-      resultPath: '$' // merge into the root of the state
+      resultPath: '$.analysis'
+    })
+
+    const dropBytes = new sfn.Pass(this, 'DropBytes', {
+      result: sfn.Result.fromString(''),
+      resultPath: '$.bytes'
     })
 
     const postProcessTask = new tasks.LambdaInvoke(this, 'PostProcess', {
@@ -157,6 +152,7 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     const definition = fetchTask
       .next(analyzeTask)
+      .next(dropBytes)
       .next(postProcessTask)
       .next(saveTask)
       .next(notifyTask)
