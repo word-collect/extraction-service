@@ -112,7 +112,12 @@ export class ExtractionServiceStack extends cdk.Stack {
                   // ← Pascal-Case union key
                   Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
                   Name: sfn.JsonPath.stringAt('$.name'),
-                  Source: { Bytes: sfn.JsonPath.stringAt('$.bytes') }
+                  Source: {
+                    Bytes: Buffer.from(
+                      sfn.JsonPath.stringAt('$.bytes'),
+                      'base64'
+                    )
+                  }
                 }
               },
               { Text: USER_PROMPT }
