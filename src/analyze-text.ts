@@ -42,8 +42,5 @@ export const handler = async (event: any) => {
     })
   )
 
-  // return the Bedrock text so SFN can pick it up at $.analysis
-  return {
-    analysis: resp.output?.message?.content?.[0]?.text ?? ''
-  }
+  return resp.output?.message?.content?.[0]?.text ?? ''
 }

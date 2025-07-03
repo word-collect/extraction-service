@@ -72,11 +72,11 @@ export class ExtractionServiceStack extends cdk.Stack {
     /* 4.  Bedrock model & Step Functions state machine         */
     /* -------------------------------------------------------- */
 
-    const model = bedrock.FoundationModel.fromFoundationModelId(
-      this,
-      'ClaudeSonnet',
-      bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0
-    )
+    // const model = bedrock.FoundationModel.fromFoundationModelId(
+    //   this,
+    //   'ClaudeSonnet',
+    //   bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0.modelId
+    // )
 
     const fetchTask = new tasks.LambdaInvoke(this, 'FetchFile', {
       lambdaFunction: fetchObjectFn,
@@ -84,7 +84,9 @@ export class ExtractionServiceStack extends cdk.Stack {
     })
 
     const region = cdk.Stack.of(this).region
-    const modelId = 'anthropic.claude-3-sonnet-20240229-v1:0' // short ID
+    const modelId =
+      bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0
+        .modelId
     const modelArn = `arn:aws:bedrock:${region}::foundation-model/${modelId}`
 
     // const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
@@ -158,15 +160,8 @@ export class ExtractionServiceStack extends cdk.Stack {
     const analyzeTask = new tasks.LambdaInvoke(this, 'AnalyzeFile', {
       lambdaFunction: analyzeFileFn,
       payloadResponseOnly: true,
-      resultPath: '$.analysis' // analysis now lives at $.analysis
+      resultPath: '$.analysis'
     })
-
-    const dropText = new sfn.Pass(this, 'DropText', {
-      result: sfn.Result.fromString(''),
-      resultPath: '$.bytes'
-    })
-
-    const result = '$.analysis'
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
       table,
@@ -175,7 +170,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           sfn.JsonPath.stringAt('$.s3Key')
         ),
         result: tasks.DynamoAttributeValue.fromString(
-          sfn.JsonPath.stringAt(result)
+          sfn.JsonPath.stringAt('$.analysis')
         )
       },
       resultPath: '$.dynamoPutResult'
@@ -190,7 +185,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           // pass S3 key and Bedrock JSON as the event body
           detail: sfn.TaskInput.fromObject({
             s3Key: sfn.JsonPath.stringAt('$.s3Key'),
-            result: sfn.JsonPath.stringAt(result)
+            result: sfn.JsonPath.stringAt('$.analysis')
           })
         }
       ]
@@ -198,7 +193,6 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     const definition = fetchTask
       .next(analyzeTask)
-      .next(dropText)
       .next(saveTask)
       .next(notifyTask)
 
@@ -229,34 +223,5 @@ export class ExtractionServiceStack extends cdk.Stack {
       },
       targets: [new targets.SfnStateMachine(stateMachine)]
     })
-
-    // /* -------------------------------------------------------- */
-    // /* 6.  Lambda + HTTP API for polling results                */
-    // /* -------------------------------------------------------- */
-    // const getResultFn = new lambda.NodejsFunction(this, 'GetResultFn', {
-    //   entry: 'src/get-result.ts',
-    //   environment: { TABLE_NAME: table.tableName }
-    // })
-
-    // table.grantReadData(getResultFn)
-
-    // const httpApi = new apigwv2.HttpApi(this, 'AiApi', {
-    //   apiName: 'ai-service',
-    //   description: 'Serves analysis results JSON'
-    // })
-
-    // httpApi.addRoutes({
-    //   path: '/analysis/{key+}',
-    //   methods: [events.HttpMethod.GET],
-    //   integration: new integrations.HttpLambdaIntegration(
-    //     'GetResultIntegration',
-    //     getResultFn
-    //   )
-    // })
-
-    // new ssm.StringParameter(this, 'AiApiEndpoint', {
-    //   parameterName: `/${appName}/${environment}/extraction-service/apiEndpoint`,
-    //   stringValue: httpApi.apiEndpoint
-    // })
   }
 }
