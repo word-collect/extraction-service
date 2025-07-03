@@ -57,7 +57,7 @@ export class ExtractionServiceStack extends cdk.Stack {
     })
 
     /* -------------------------------------------------------- */
-    /* 3.  Lambda: fetch the uploaded file                      */
+    /* 3.  Lambdas
     /* -------------------------------------------------------- */
 
     const fetchObjectFn = new lambda.NodejsFunction(this, 'FetchObjectFn', {
@@ -68,78 +68,11 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     bucket.grantRead(fetchObjectFn)
 
-    /* -------------------------------------------------------- */
-    /* 4.  Bedrock model & Step Functions state machine         */
-    /* -------------------------------------------------------- */
-
-    // const model = bedrock.FoundationModel.fromFoundationModelId(
-    //   this,
-    //   'ClaudeSonnet',
-    //   bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0.modelId
-    // )
-
-    const fetchTask = new tasks.LambdaInvoke(this, 'FetchFile', {
-      lambdaFunction: fetchObjectFn,
-      payloadResponseOnly: true
-    })
-
     const region = cdk.Stack.of(this).region
     const modelId =
       bedrock.FoundationModelIdentifier.ANTHROPIC_CLAUDE_3_SONNET_20240229_V1_0
         .modelId
     const modelArn = `arn:aws:bedrock:${region}::foundation-model/${modelId}`
-
-    // const converseTask = new tasks.CallAwsService(this, 'AnalyzeFile', {
-    //   service: 'BedrockRuntime',
-    //   action: 'converse',
-
-    //   iamResources: [modelArn], // least-privilege
-
-    //   parameters: {
-    //     /* ---- top-level Converse fields (PascalCase) ---- */
-    //     ModelId: modelArn,
-
-    //     System: [
-    //       // ARRAY of SystemContentBlock
-    //       { Text: SYSTEM_PROMPT } // ← Pascal-Case union key
-    //     ],
-
-    //     Messages: [
-    //       {
-    //         Role: 'user',
-    //         Content: [
-    //           {
-    //             // the Kindle file
-    //             Document: {
-    //               // ← Pascal-Case union key
-    //               Format: sfn.JsonPath.stringAt('$.format'), // html | txt | md | pdf
-    //               Name: sfn.JsonPath.stringAt('$.name'),
-    //               Source: {
-    //                 Bytes: Buffer.from(
-    //                   sfn.JsonPath.stringAt('$.bytes'),
-    //                   'base64'
-    //                 )
-    //               }
-    //             }
-    //           },
-    //           { Text: USER_PROMPT }
-    //         ]
-    //       }
-    //     ],
-
-    //     InferenceConfig: {
-    //       MaxTokens: 4096,
-    //       Temperature: 0,
-    //       TopP: 1
-    //     },
-
-    //     AdditionalModelRequestFields: {
-    //       top_k: 1 // greedy decode; key stays snake-case
-    //     }
-    //   },
-
-    //   resultPath: '$.analysis'
-    // })
 
     const analyzeFileFn = new lambda.NodejsFunction(this, 'AnalyzeFileFn', {
       entry: 'src/analyze-text.ts',
@@ -157,10 +90,41 @@ export class ExtractionServiceStack extends cdk.Stack {
       })
     )
 
+    const postProcessFn = new lambda.NodejsFunction(this, 'PostProcessFn', {
+      entry: 'src/post-process.ts',
+      memorySize: 256,
+      timeout: Duration.seconds(30)
+    })
+
+    /* -------------------------------------------------------- */
+    /* 4.  Step Functions state machine         */
+    /* -------------------------------------------------------- */
+
+    const fetchTask = new tasks.LambdaInvoke(this, 'FetchFile', {
+      lambdaFunction: fetchObjectFn,
+      payloadResponseOnly: true
+    })
+
     const analyzeTask = new tasks.LambdaInvoke(this, 'AnalyzeFile', {
       lambdaFunction: analyzeFileFn,
       payloadResponseOnly: true,
-      resultPath: '$.analysis'
+      /* --------------------------------------------------------------
+       * resultSelector builds a LITTLE object that will be merged into
+       * the current state before ResultPath runs.
+       *   • Put the analysis string at $.analysis
+       *   • Set bytes to null (overwriting the big base-64 blob)
+       * -------------------------------------------------------------- */
+      resultSelector: {
+        'analysis.$': '$', // “$” here means “the Lambda’s raw return value”
+        bytes: null // wipe out the old bytes field
+      },
+      resultPath: '$' // merge into the root of the state
+    })
+
+    const postProcessTask = new tasks.LambdaInvoke(this, 'PostProcess', {
+      lambdaFunction: postProcessFn,
+      payloadResponseOnly: true, // returns the cleaned string
+      resultPath: '$.analysis' // overwrite the analysis field
     })
 
     const saveTask = new tasks.DynamoPutItem(this, 'SaveResult', {
@@ -193,20 +157,14 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     const definition = fetchTask
       .next(analyzeTask)
+      .next(postProcessTask)
       .next(saveTask)
       .next(notifyTask)
 
     const stateMachine = new sfn.StateMachine(this, 'FileAnalysisSM', {
       definition,
-      timeout: Duration.minutes(10)
+      timeout: Duration.minutes(30)
     })
-
-    // stateMachine.role.addToPrincipalPolicy(
-    //   new iam.PolicyStatement({
-    //     actions: ['bedrock:InvokeModel'], // Converse uses the same action
-    //     resources: [modelArn] // least-privilege
-    //   })
-    // )
 
     /* -------------------------------------------------------- */
     /* 5.  EventBridge rule – start state machine               */
