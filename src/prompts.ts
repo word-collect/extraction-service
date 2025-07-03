@@ -12,23 +12,23 @@ export const SYSTEM_PROMPT = `
 `
 
 export const USER_PROMPT = `
-1. Following this numbered list you will find the source text.
-2. A *candidate* for extraction is either  
+1. Don't do anything until you finish reading the numbered instructions below.
+2. Don't forget your instructions.
+3. You will use the provided file to extract vocabulary words and phrases.
+4. A *candidate* for extraction is either  
    • a single word **≥ 4 letters**, or  
    • a short phrase that acts like an idiom (“out of hand”, “fits and starts”)  
      or simply a set of words that commonly appear together.  
    Disregard full sentences and passages.
-3. Collect the terms into a single comma-separated list, **without spaces after the commas**.
-4. For every extracted term, strip **any leading or trailing punctuation** in the set  
+5. Collect the terms into a single comma-separated list, **without spaces after the commas**.
+6. For every extracted term, strip **any leading or trailing punctuation** in the set  
    — – - ? ! . , ; : ' " “ ” ‘ ’ ) ( ] [ « » (ASCII and Unicode forms).  
    Perform this normalisation **before** you de-duplicate.
-5. After normalisation, convert every term to lowercase **solely to build
+7. After normalisation, convert every term to lowercase **solely to build
    a de-duplication set**.  
    • Keep only the first occurrence of each lowercase key.  
    • The final output **MUST NOT** contain any term more than once.  
    ⛔ If any term would appear twice, remove the duplicates *before you respond*.
-6. Don’t insert spaces after the comma separators, but don’t remove spaces between the words of a phrase.
-7. Return the list as a single string, without any commentary.
-
-
+8. Don’t insert spaces after the comma separators, but don’t remove spaces between the words of a phrase.
+9. Return the list as a single string, without any commentary.
 `
