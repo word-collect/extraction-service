@@ -36,10 +36,12 @@ export const handler = async (event: {
   //   format = 'txt'
   // }
 
+  const [, sub] = object.key.split('/') // raw/<sub>/<uuid>
   return {
     s3Key: object.key,
     name: object.key.split('/').pop()!,
     format, // html | md | txt | pdf
-    bytes: fileBuf.toString('base64')
+    bytes: fileBuf.toString('base64'),
+    userSub: sub
   }
 }

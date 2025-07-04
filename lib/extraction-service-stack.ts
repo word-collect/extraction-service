@@ -144,6 +144,7 @@ export class ExtractionServiceStack extends cdk.Stack {
           // pass S3 key and Bedrock JSON as the event body
           detail: sfn.TaskInput.fromObject({
             s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+            userSub: sfn.JsonPath.stringAt('$.userSub'),
             result: sfn.JsonPath.stringAt('$.analysis')
           })
         }
