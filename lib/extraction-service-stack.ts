@@ -111,7 +111,8 @@ export class ExtractionServiceStack extends cdk.Stack {
               userSub: sfn.JsonPath.stringAt('$.userSub')
             })
           }
-        ]
+        ],
+        resultPath: sfn.JsonPath.DISCARD
       }
     )
 
@@ -129,7 +130,8 @@ export class ExtractionServiceStack extends cdk.Stack {
               userSub: sfn.JsonPath.stringAt('$.userSub')
             })
           }
-        ]
+        ],
+        resultPath: sfn.JsonPath.DISCARD
       }
     )
 
@@ -147,7 +149,8 @@ export class ExtractionServiceStack extends cdk.Stack {
               userSub: sfn.JsonPath.stringAt('$.userSub')
             })
           }
-        ]
+        ],
+        resultPath: sfn.JsonPath.DISCARD
       }
     )
 
@@ -164,7 +167,8 @@ export class ExtractionServiceStack extends cdk.Stack {
             result: sfn.JsonPath.stringAt('$.analysis')
           })
         }
-      ]
+      ],
+      resultPath: sfn.JsonPath.DISCARD
     })
 
     /* -------------------------------------------------------- */
