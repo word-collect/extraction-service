@@ -96,6 +96,77 @@ export class ExtractionServiceStack extends cdk.Stack {
       timeout: Duration.seconds(30)
     })
 
+    // events
+    const uploadReceivedEvt = new tasks.EventBridgePutEvents(
+      this,
+      'UploadReceived',
+      {
+        entries: [
+          {
+            eventBus,
+            source: 'extraction-service',
+            detailType: 'UploadReceived',
+            detail: sfn.TaskInput.fromObject({
+              s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+              userSub: sfn.JsonPath.stringAt('$.userSub')
+            })
+          }
+        ]
+      }
+    )
+
+    const analysisStartedEvt = new tasks.EventBridgePutEvents(
+      this,
+      'AnalysisStarted',
+      {
+        entries: [
+          {
+            eventBus,
+            source: 'extraction-service',
+            detailType: 'AnalysisStarted',
+            detail: sfn.TaskInput.fromObject({
+              s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+              userSub: sfn.JsonPath.stringAt('$.userSub')
+            })
+          }
+        ]
+      }
+    )
+
+    const analysisCompletedEvt = new tasks.EventBridgePutEvents(
+      this,
+      'AnalysisCompleted',
+      {
+        entries: [
+          {
+            eventBus,
+            source: 'extraction-service',
+            detailType: 'AnalysisCompleted',
+            detail: sfn.TaskInput.fromObject({
+              s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+              userSub: sfn.JsonPath.stringAt('$.userSub')
+            })
+          }
+        ]
+      }
+    )
+
+    const notifyTask = new tasks.EventBridgePutEvents(this, 'EmitReadyEvent', {
+      entries: [
+        {
+          eventBus,
+          detailType: 'AnalysisReady',
+          source: 'extraction-service',
+          // pass S3 key and Bedrock JSON as the event body
+          detail: sfn.TaskInput.fromObject({
+            s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+            userSub: sfn.JsonPath.stringAt('$.userSub'),
+            result: sfn.JsonPath.stringAt('$.analysis')
+          })
+        }
+      ]
+    })
+
     /* -------------------------------------------------------- */
     /* 4.  Step Functions state machine         */
     /* -------------------------------------------------------- */
@@ -135,24 +206,11 @@ export class ExtractionServiceStack extends cdk.Stack {
       resultPath: '$.dynamoPutResult'
     })
 
-    const notifyTask = new tasks.EventBridgePutEvents(this, 'EmitReadyEvent', {
-      entries: [
-        {
-          eventBus,
-          detailType: 'AnalysisReady',
-          source: 'extraction-service',
-          // pass S3 key and Bedrock JSON as the event body
-          detail: sfn.TaskInput.fromObject({
-            s3Key: sfn.JsonPath.stringAt('$.s3Key'),
-            userSub: sfn.JsonPath.stringAt('$.userSub'),
-            result: sfn.JsonPath.stringAt('$.analysis')
-          })
-        }
-      ]
-    })
-
     const definition = fetchTask
+      .next(uploadReceivedEvt)
+      .next(analysisStartedEvt)
       .next(analyzeTask)
+      .next(analysisCompletedEvt)
       .next(dropBytes)
       .next(postProcessTask)
       .next(saveTask)
