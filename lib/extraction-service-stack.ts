@@ -320,6 +320,11 @@ export class ExtractionServiceStack extends cdk.Stack {
       .next(classifyTask)
       .next(classificationCompletedEvt)
       .next(routeByDocType)
+      .next(
+        routeByDocType.afterwards({
+          includeOtherwise: true // follow the ‘otherwise’ branch too
+        })
+      )
       .next(analysisCompletedEvt)
       .next(dropBytes)
       .next(postProcessTask)
