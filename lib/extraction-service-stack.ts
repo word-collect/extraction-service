@@ -308,11 +308,6 @@ export class ExtractionServiceStack extends cdk.Stack {
         sfn.Condition.stringEquals('$.classification', 'ARTICLE_PROSE'),
         articleExtractTask
       )
-      .otherwise(
-        new sfn.Fail(this, 'UnknownDocType', {
-          cause: 'Classifier returned an unexpected label'
-        })
-      )
 
     const definition = fetchTask
       .next(uploadReceivedEvt)
