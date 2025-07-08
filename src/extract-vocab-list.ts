@@ -2,31 +2,25 @@ import {
   BedrockRuntimeClient,
   ConverseCommand
 } from '@aws-sdk/client-bedrock-runtime'
-import { SYSTEM_PROMPT, USER_PROMPT } from './prompts'
+import {
+  VOCAB_LIST_EXTRACTION_SYSTEM_PROMPT,
+  VOCAB_LIST_EXTRACTION_USER_PROMPT
+} from './prompts'
 
-const client = new BedrockRuntimeClient({})
+const brClient = new BedrockRuntimeClient({})
 
-/**
- * Expected event shape (from FetchObjectFn):
- * {
- *   format: 'html' | 'txt' | 'md' | 'pdf',
- *   name:   'sample.html',
- *   bytes:  '<base-64 string>',
- *   s3Key:  'raw/…'
- * }
- */
 export const handler = async (event: any) => {
   const { format, name, bytes } = event
 
-  const resp = await client.send(
+  const resp = await brClient.send(
     new ConverseCommand({
-      modelId: process.env.MODEL_ID!, // short ID
-      system: [{ text: SYSTEM_PROMPT }],
+      modelId: process.env.MODEL_ID!,
+      system: [{ text: VOCAB_LIST_EXTRACTION_SYSTEM_PROMPT }],
       messages: [
         {
           role: 'user',
           content: [
-            { text: USER_PROMPT },
+            { text: VOCAB_LIST_EXTRACTION_USER_PROMPT },
             {
               document: {
                 format,
@@ -42,5 +36,5 @@ export const handler = async (event: any) => {
     })
   )
 
-  return resp.output?.message?.content?.[0]?.text ?? ''
+  return resp.output?.message?.content?.[0]?.text?.trim() ?? ''
 }

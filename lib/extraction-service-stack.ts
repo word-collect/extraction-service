@@ -10,11 +10,7 @@ import * as bedrock from 'aws-cdk-lib/aws-bedrock'
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks'
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions'
 import * as targets from 'aws-cdk-lib/aws-events-targets'
-// import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations'
-// import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2'
-import { SYSTEM_PROMPT, USER_PROMPT } from '../src/prompts'
 import * as iam from 'aws-cdk-lib/aws-iam'
-// import * as logs from 'aws-cdk-lib/aws-logs'
 
 export interface ExtractionServiceStackProps extends cdk.StackProps {
   appName: string
@@ -62,7 +58,7 @@ export class ExtractionServiceStack extends cdk.Stack {
 
     const fetchObjectFn = new lambda.NodejsFunction(this, 'FetchObjectFn', {
       entry: 'src/fetch-object.ts',
-      memorySize: 1024,
+      memorySize: 2048,
       timeout: Duration.minutes(1)
     })
 
@@ -74,16 +70,66 @@ export class ExtractionServiceStack extends cdk.Stack {
         .modelId
     const modelArn = `arn:aws:bedrock:${region}::foundation-model/${modelId}`
 
-    const analyzeFileFn = new lambda.NodejsFunction(this, 'AnalyzeFileFn', {
-      entry: 'src/analyze-text.ts',
+    const classifyFn = new lambda.NodejsFunction(this, 'ClassifyFn', {
+      entry: 'src/classify-text.ts',
+      memorySize: 2048,
+      timeout: Duration.minutes(2),
+      environment: { MODEL_ID: modelId },
+      bundling: { nodeModules: ['@aws-sdk/client-bedrock-runtime'] }
+    })
+
+    const kindleExtractFn = new lambda.NodejsFunction(this, 'ExtractKindleFn', {
+      entry: 'src/extract-kindle.ts',
       memorySize: 2048,
       timeout: Duration.minutes(15),
       environment: { MODEL_ID: modelId },
-      bundling: { nodeModules: ['@aws-sdk/client-bedrock-runtime'] } // v3 SDK
+      bundling: { nodeModules: ['@aws-sdk/client-bedrock-runtime'] }
     })
 
+    const vocabExtractFn = new lambda.NodejsFunction(
+      this,
+      'ExtractVocabListFn',
+      {
+        entry: 'src/extract-vocab-list.ts',
+        memorySize: 2048,
+        timeout: Duration.minutes(15),
+        environment: { MODEL_ID: modelId },
+        bundling: { nodeModules: ['@aws-sdk/client-bedrock-runtime'] }
+      }
+    )
+
+    const articleExtractFn = new lambda.NodejsFunction(
+      this,
+      'ExtractArticleFn',
+      {
+        entry: 'src/extract-article.ts',
+        memorySize: 2048,
+        timeout: Duration.minutes(15),
+        environment: { MODEL_ID: modelId },
+        bundling: { nodeModules: ['@aws-sdk/client-bedrock-runtime'] }
+      }
+    )
+
     // least-privilege permission
-    analyzeFileFn.addToRolePolicy(
+    classifyFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [modelArn]
+      })
+    )
+    kindleExtractFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [modelArn]
+      })
+    )
+    vocabExtractFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['bedrock:InvokeModel'],
+        resources: [modelArn]
+      })
+    )
+    articleExtractFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['bedrock:InvokeModel'],
         resources: [modelArn]
@@ -154,6 +200,26 @@ export class ExtractionServiceStack extends cdk.Stack {
       }
     )
 
+    const classificationCompletedEvt = new tasks.EventBridgePutEvents(
+      this,
+      'ClassificationCompleted',
+      {
+        entries: [
+          {
+            eventBus,
+            source: 'extraction-service',
+            detailType: 'ClassificationCompleted',
+            detail: sfn.TaskInput.fromObject({
+              s3Key: sfn.JsonPath.stringAt('$.s3Key'),
+              userSub: sfn.JsonPath.stringAt('$.userSub'),
+              classification: sfn.JsonPath.stringAt('$.classification')
+            })
+          }
+        ],
+        resultPath: sfn.JsonPath.DISCARD
+      }
+    )
+
     const notifyTask = new tasks.EventBridgePutEvents(this, 'EmitReadyEvent', {
       entries: [
         {
@@ -180,8 +246,26 @@ export class ExtractionServiceStack extends cdk.Stack {
       payloadResponseOnly: true
     })
 
-    const analyzeTask = new tasks.LambdaInvoke(this, 'AnalyzeFile', {
-      lambdaFunction: analyzeFileFn,
+    const classifyTask = new tasks.LambdaInvoke(this, 'ClassifyDocument', {
+      lambdaFunction: classifyFn,
+      payloadResponseOnly: true,
+      resultPath: '$.classification'
+    })
+
+    const kindleExtractTask = new tasks.LambdaInvoke(this, 'ExtractKindle', {
+      lambdaFunction: kindleExtractFn,
+      payloadResponseOnly: true,
+      resultPath: '$.analysis'
+    })
+
+    const vocabExtractTask = new tasks.LambdaInvoke(this, 'ExtractVocabList', {
+      lambdaFunction: vocabExtractFn,
+      payloadResponseOnly: true,
+      resultPath: '$.analysis'
+    })
+
+    const articleExtractTask = new tasks.LambdaInvoke(this, 'ExtractArticle', {
+      lambdaFunction: articleExtractFn,
       payloadResponseOnly: true,
       resultPath: '$.analysis'
     })
@@ -210,10 +294,32 @@ export class ExtractionServiceStack extends cdk.Stack {
       resultPath: '$.dynamoPutResult'
     })
 
+    /* ---------- 4B. Choice state ---------- */
+    const routeByDocType = new sfn.Choice(this, 'RouteByDocType')
+      .when(
+        sfn.Condition.stringEquals('$.classification', 'KINDLE_NOTES_EXPORT'),
+        kindleExtractTask
+      )
+      .when(
+        sfn.Condition.stringEquals('$.classification', 'VOCAB_LIST'),
+        vocabExtractTask
+      )
+      .when(
+        sfn.Condition.stringEquals('$.classification', 'ARTICLE_PROSE'),
+        articleExtractTask
+      )
+      .otherwise(
+        new sfn.Fail(this, 'UnknownDocType', {
+          cause: 'Classifier returned an unexpected label'
+        })
+      )
+
     const definition = fetchTask
       .next(uploadReceivedEvt)
       .next(analysisStartedEvt)
-      .next(analyzeTask)
+      .next(classifyTask)
+      .next(classificationCompletedEvt)
+      .next(routeByDocType)
       .next(analysisCompletedEvt)
       .next(dropBytes)
       .next(postProcessTask)
